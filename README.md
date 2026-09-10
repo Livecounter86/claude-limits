@@ -1,189 +1,197 @@
 # Claude Limits
 
-Застосунок для macOS, що показує в menu bar, скільки лімітів Claude уже
-використано.
+Repository: https://github.com/Livecounter86/claude-limits
+
+_Ukrainian version: [README-UA.md](README-UA.md)_
+
+A macOS app that shows in the menu bar how much of your Claude usage limits
+you have used.
 
 ```
-menu bar:  ⟨ 41% · 16% ⟩      сесія · тиждень
+menu bar:  ⟨ 41% · 16% ⟩      session · week
 ```
 
-Клік розгортає деталі: відсотки, прогрес-бари, час скидання кожного вікна та
-залишок extra-кредитів.
+Click to expand the details: percentages, progress bars, reset time for each
+window, and remaining extra credits.
 
 ---
 
-## Звідки беруться дані
+## Where the data comes from
 
-Застосунок читає OAuth-токен, який Claude Code уже зберігає у твоєму login
-keychain (запис `Claude Code-credentials`), і робить два запити від твого імені:
+The app reads the OAuth token that Claude Code already stores in your login
+keychain (the `Claude Code-credentials` entry) and makes two requests on your
+behalf:
 
-| Запит | Що дає |
+| Request | What it returns |
 |---|---|
-| `GET https://api.anthropic.com/api/oauth/usage` | 5-годинне й тижневе вікна, ліміти по моделях, extra-кредити |
-| `GET https://api.anthropic.com/api/oauth/profile` | ім'я, email, план (необов'язковий — якщо не вдасться, цифри все одно покажуться) |
+| `GET https://api.anthropic.com/api/oauth/usage` | 5-hour and weekly windows, per-model limits, extra credits |
+| `GET https://api.anthropic.com/api/oauth/profile` | name, email, plan (optional — if it fails, the numbers still show) |
 
-**Жоден токен не зберігається і нікуди не копіюється.** Keychain читається
-наживо при кожному оновленні, тож єдиним власником токена лишається Claude
-Code — він же й оновлює його. Через це:
+**No token is ever stored or copied anywhere.** The keychain is read live on
+every refresh, so Claude Code remains the sole owner of the token — and the
+one that keeps it fresh. Because of this:
 
-- нічого не протухає і не треба нічого перевставляти;
-- немає конфлікту ротації refresh-токенів;
-- **перемикання акаунта не потребує інтерфейсу** — зроби `claude auth login` під
-  іншим акаунтом, і застосунок сам почне показувати його.
+- nothing goes stale and nothing needs to be re-entered;
+- there's no conflict with refresh-token rotation;
+- **switching accounts needs no UI** — run `claude auth login` under a
+  different account and the app will start showing it automatically.
 
 ---
 
-## Встановлення на цьому маку
+## Installing on this Mac
 
 ```sh
 cd ~/claude-limits
-make install      # зібрати, покласти в /Applications і запустити
+make install      # build, put in /Applications, and launch
 ```
 
-При першому запуску macOS один раз спитає дозвіл на читання
-`Claude Code-credentials` — натисни **«Always Allow»**.
+On first launch macOS will ask once for permission to read
+`Claude Code-credentials` — click **"Always Allow"**.
 
-Автозапуск при вході вмикається галочкою в самому меню.
+Launch at login is a checkbox in the app's own menu.
 
 ---
 
-## Встановлення на новому маку
+## Installing on a new Mac
 
-Потрібен Mac на Apple Silicon (`arm64`) з macOS 13+ і залогіненим Claude Code.
+You need a Mac on Apple Silicon (`arm64`) with macOS 13+ and Claude Code
+already signed in.
 
-### Варіант 1 — зібрати на місці (рекомендую)
+### Option 1 — build in place (recommended)
 
-Копіюй **увесь каталог з вихідним кодом**:
+Copy **the whole source directory**:
 
 ```
 ~/claude-limits
 ```
 
-Достатньо скопіювати без `.build` і `ClaudeLimits.app` — це артефакти збірки:
+No need to copy `.build` or `ClaudeLimits.app` — those are build artifacts:
 
 ```sh
 rsync -av --exclude .build --exclude ClaudeLimits.app \
-      ~/claude-limits/ новий-мак:~/claude-limits/
+      ~/claude-limits/ new-mac:~/claude-limits/
 ```
 
-На новому маку:
+On the new Mac:
 
 ```sh
 cd ~/claude-limits
 make install
 ```
 
-Потрібні лише Command Line Tools (`xcode-select --install`). Повний Xcode
-потрібен тільки для `make test`.
+Only the Command Line Tools are required (`xcode-select --install`). Full
+Xcode is only needed for `make test`.
 
-Цей шлях чистий: застосунок збирається локально, тож карантину й проблем із
-Gatekeeper не виникає взагалі.
+This path is clean: the app is built locally, so quarantine and Gatekeeper
+issues never come up.
 
-### Варіант 2 — перенести готовий `.app`
+### Option 2 — copy the built `.app`
 
-Копіюй один каталог-бандл:
+Copy a single bundle directory:
 
 ```
 ~/claude-limits/ClaudeLimits.app
 ```
 
-Він самодостатній (468 KB, лише системні фреймворки), поклади його в
+It's self-contained (468 KB, system frameworks only) — drop it into
 `/Applications`.
 
-⚠️ **Але:** застосунок підписаний ad-hoc і не нотаризований, тож Gatekeeper його
-відхиляє. Якщо перенести через AirDrop, браузер або пошту, macOS причепить
-атрибут карантину й відмовиться запускати. Знімається так:
+⚠️ **But:** the app is ad-hoc signed and not notarized, so Gatekeeper rejects
+it. If you transfer it via AirDrop, a browser, or email, macOS will attach a
+quarantine attribute and refuse to launch it. Clear it like this:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/ClaudeLimits.app
 open /Applications/ClaudeLimits.app
 ```
 
-Перенесення через USB, `scp` чи `rsync` карантин зазвичай не чіпляє, і тоді цей
-крок не потрібен.
+Transferring via USB, `scp`, or `rsync` usually doesn't trigger quarantine, in
+which case this step isn't needed.
 
 ---
 
-## Команди
+## Commands
 
 ```sh
-make app         # зібрати ClaudeLimits.app
-make run         # зібрати й запустити звідси, без встановлення
-make install     # у /Applications і запустити
-make uninstall   # прибрати з /Applications
-make test        # 45 тестів (потрібен Xcode)
+make app         # build ClaudeLimits.app
+make run         # build and run from here, without installing
+make install     # install to /Applications and launch
+make uninstall   # remove from /Applications
+make test        # 45 tests (requires Xcode)
 make clean
 ```
 
-## Те саме в терміналі
+## Same thing in the terminal
 
 ```sh
 /Applications/ClaudeLimits.app/Contents/MacOS/ClaudeLimits --print
 ```
 
 ```
-Andrii · team
-oliinyk.andrii@airslate.com
+Alex · team
+example@example.com
 
-5-годинна сесія — 41%
-▓▓▓▓▓▓░░░░░░░░  → 20:19 · через 4г 5хв
+5-hour session — 41%
+▓▓▓▓▓▓░░░░░░░░  → 20:19 · in 4h 5m
 
-Тиждень · усі моделі — 16%
-▓▓░░░░░░░░░░░░  → 05.09 20:59 · через 1д 4г
+Week · all models — 16%
+▓▓░░░░░░░░░░░░  → 09/05 20:59 · in 1d 4h
 
 Extra credits — $0.00 / $140.00
 ```
 
-Зручно для `statusline` або скриптів.
+Handy for a `statusline` or scripts.
 
-## Оновлення даних
+## Data refresh
 
-Раз на 5 хвилин, і ще раз — у момент відкриття меню. Тобто цифри найсвіжіші
-саме тоді, коли ти на них дивишся. Опитується лише залогінений акаунт.
+Once every 5 minutes, and again the moment the menu is opened. So the numbers
+are freshest exactly when you're looking at them. Only the signed-in account
+is polled.
 
-## Коли щось не так
+## When something's wrong
 
-| Ситуація | Що побачиш |
+| Situation | What you'll see |
 |---|---|
-| Не залогінений у Claude Code | `Не залогінено в Claude Code` + `Виконай у терміналі: claude auth login` |
-| Токен відхилено (401/403) | `Токен недійсний` + та сама підказка |
-| Немає доступу до keychain | підказка дозволити доступ у System Settings › Privacy |
-| Немає мережі | останні цифри, приглушені, з підписом `Дані від HH:MM` |
+| Not signed in to Claude Code | `Не залогінено в Claude Code` + `Run in terminal: claude auth login` |
+| Token rejected (401/403) | `Токен недійсний` + the same hint |
+| No access to keychain | a hint to allow access in System Settings › Privacy |
+| No network | the last numbers, dimmed, labeled `Дані від HH:MM` |
 
-Два принципи:
+Two principles:
 
-- Застарілі цифри **завжди** позначені як застарілі, а не видаються за свіжі.
-- Підказка «що робити» показується **і тоді**, коли попередні цифри ще є, —
-  саме так виглядає розлогінення посеред роботи.
+- Stale numbers are **always** marked as stale, never passed off as fresh.
+- The "what to do" hint shows up **even while** the previous numbers are still
+  there — that's exactly what a mid-session sign-out looks like.
 
-Розлогінення не ламає запис у keychain: Claude Code лишає його на місці й
-просто спорожняє токен (там же лежать токени MCP-серверів). Тому порожній
-токен трактується як «не залогінено», а не як пошкоджені дані — це різні
-ситуації, і лікуються вони по-різному.
+Signing out doesn't break the keychain entry: Claude Code leaves it in place
+and just empties the token (the same entry also holds MCP server tokens). So
+an empty token is treated as "signed out," not as corrupted data — those are
+different situations, and they're fixed differently.
 
 ---
 
-## Структура
+## Structure
 
-| Файл | Роль |
+| File | Role |
 |---|---|
-| `Sources/ClaudeLimitsCore/Models.swift` | типи відповіді API, список вікон для показу |
-| `Sources/ClaudeLimitsCore/Keychain.swift` | читання креденшелів Claude Code |
-| `Sources/ClaudeLimitsCore/UsageAPI.swift` | два HTTP-запити |
-| `Sources/ClaudeLimitsCore/Formatting.swift` | бари, час, гроші, назви планів |
-| `Sources/ClaudeLimitsCore/TextReport.swift` | рендер для `--print` |
-| `Sources/ClaudeLimitsApp/MenuBarController.swift` | статус-айтем і меню |
-| `Resources/Info.plist` | `LSUIElement` — без іконки в доку |
+| `Sources/ClaudeLimitsCore/Models.swift` | API response types, list of windows to show |
+| `Sources/ClaudeLimitsCore/Keychain.swift` | reads Claude Code's credentials |
+| `Sources/ClaudeLimitsCore/UsageAPI.swift` | the two HTTP requests |
+| `Sources/ClaudeLimitsCore/Formatting.swift` | bars, time, money, plan names |
+| `Sources/ClaudeLimitsCore/TextReport.swift` | rendering for `--print` |
+| `Sources/ClaudeLimitsApp/MenuBarController.swift` | status item and menu |
+| `Resources/Info.plist` | `LSUIElement` — no Dock icon |
 
-Усе, крім шару AppKit, покрито тестами — зокрема парсинг таймстемпів із шістьма
-дробовими цифрами, які штатний `ISO8601DateFormatter` не приймає.
+Everything except the AppKit layer is covered by tests — including parsing
+timestamps with six fractional digits, which the stock
+`ISO8601DateFormatter` doesn't accept.
 
-## Обмеження
+## Limitations
 
-- Тільки Apple Silicon. Для Intel треба перезібрати з
+- Apple Silicon only. For Intel, rebuild with
   `swift build -c release --arch arm64 --arch x86_64`.
-- Ad-hoc підпис: після кожної перезбірки підпис змінюється, тож macOS може ще
-  раз спитати дозвіл на keychain. Прибирається лише справжнім Developer ID.
-- API віддає **відсотки**, а не кількість повідомлень чи токенів, — показати
-  «скільки лишилось запитів» технічно неможливо.
-- Один акаунт за раз: стільки ж, скільки тримає сам Claude Code.
+- Ad-hoc signature: the signature changes on every rebuild, so macOS may ask
+  for keychain permission again. Only fixed by a real Developer ID.
+- The API returns **percentages**, not message or token counts — showing "how
+  many requests are left" is technically impossible.
+- One account at a time: exactly as many as Claude Code itself holds.
