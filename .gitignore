@@ -1,0 +1,4 @@
+.build/
+ClaudeLimits.app/
+.swiftpm/
+.DS_Store
