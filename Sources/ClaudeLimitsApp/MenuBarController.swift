@@ -15,7 +15,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         case failed(Error, lastGood: UsageSnapshot?)
     }
 
-    private static let refreshInterval: TimeInterval = 300   // 5 minutes
+    private static let refreshInterval: TimeInterval = 60
     private static let barWidth = 14
 
     private let statusItem: NSStatusItem
