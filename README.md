@@ -144,9 +144,10 @@ Handy for a `statusline` or scripts.
 
 ## Data refresh
 
-Once every 5 minutes, and again the moment the menu is opened. So the numbers
-are freshest exactly when you're looking at them. Only the signed-in account
-is polled.
+Once every 90 seconds, and again the moment the menu is opened — though a
+menu open within 90 seconds of the last fetch is skipped, to stay under the
+API's rate limit. "Refresh now" in the menu always fetches immediately. Only
+the signed-in account is polled.
 
 ## When something's wrong
 
