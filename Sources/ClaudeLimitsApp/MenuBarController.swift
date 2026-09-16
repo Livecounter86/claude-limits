@@ -16,9 +16,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private static let refreshInterval: TimeInterval = 90
-    /// Below this gap since the last attempt, an automatic refresh (timer or
-    /// menu open) is skipped — the API rate-limits these endpoints, and a
-    /// menu opened right after a timer tick was causing 429s.
+    /// Cooldown for automatic refreshes — see AGENTS.md "Refresh throttling".
     private static let minimumRefreshInterval: TimeInterval = 90
     private static let barWidth = 14
 
@@ -58,15 +56,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - Refresh
 
     /// Numbers are fetched on a slow timer, and again the moment the menu is
-    /// opened — so they are freshest exactly when they are being read. A menu
-    /// open shortly after the timer already fired is throttled instead of
-    /// firing a second request.
+    /// opened — so they are freshest exactly when they are being read.
     func menuWillOpen(_ menu: NSMenu) {
         refresh()
     }
 
-    /// The explicit "Refresh now" action always goes through, cooldown or not
-    /// — the user asked for this one directly.
     @objc func refreshNow() {
         refresh(force: true)
     }
