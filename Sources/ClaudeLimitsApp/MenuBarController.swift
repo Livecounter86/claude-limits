@@ -2,7 +2,6 @@ import AppKit
 import ServiceManagement
 import ClaudeLimitsCore
 
-/// Owns the status item and its menu, and keeps them in step with the API.
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
 
@@ -10,13 +9,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private enum State {
         case loading
         case loaded(UsageSnapshot)
-        /// Something went wrong. Any previous reading is kept so the menu can
-        /// show stale-but-labelled numbers instead of nothing.
         case failed(Error, lastGood: UsageSnapshot?)
     }
 
     private static let refreshInterval: TimeInterval = 90
-    /// Cooldown for automatic refreshes — see AGENTS.md "Refresh throttling".
     private static let minimumRefreshInterval: TimeInterval = 90
     private static let barWidth = 14
 
@@ -35,8 +31,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
 
         menu.delegate = self
-        // AppKit greys out disabled items and ignores their attributed
-        // colour, so items are enabled and simply carry no action.
         menu.autoenablesItems = false
         statusItem.menu = menu
         statusItem.button?.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
@@ -53,10 +47,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         timer?.invalidate()
     }
 
-    // MARK: - Refresh
-
-    /// Numbers are fetched on a slow timer, and again the moment the menu is
-    /// opened — so they are freshest exactly when they are being read.
     func menuWillOpen(_ menu: NSMenu) {
         refresh()
     }
@@ -95,7 +85,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    // MARK: - Rendering
 
     private func render() {
         renderStatusItem()
@@ -145,7 +134,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         ])
     }
 
-    // MARK: - Menu
 
     private func renderMenu() {
         menu.removeAllItems()
@@ -277,8 +265,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(caption(hint, secondary: true))
     }
 
-    // MARK: - Menu item builders
-
     private func header(_ text: String) -> NSMenuItem {
         let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
         item.isEnabled = true
@@ -305,8 +291,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// A label with its value pushed to the right via a tab stop, so the
-    /// percentages line up down the menu.
     private func row(_ title: String, trailing: String) -> NSMenuItem {
         let item = NSMenuItem(title: "\(title)  \(trailing)", action: nil, keyEquivalent: "")
         item.isEnabled = true
@@ -321,8 +305,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         ])
         return item
     }
-
-    // MARK: - Helpers
 
     private func clock(_ date: Date) -> String {
         Formatting.clockText(date, now: Date(), calendar: .current)

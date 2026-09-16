@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:claude-limits}",
+            "name": "Debug ClaudeLimitsApp",
+            "target": "ClaudeLimitsApp",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ClaudeLimitsApp"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:claude-limits}",
+            "name": "Release ClaudeLimitsApp",
+            "target": "ClaudeLimitsApp",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ClaudeLimitsApp"
+        }
+    ]
+}
