@@ -68,8 +68,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             guard let self else { return }
             do {
                 let snapshot = try await self.api.fetchSnapshot()
+                for skipped in snapshot.usage.skippedLimits {
+                    NSLog("ClaudeLimits: skipped limit %@ — %@",
+                          skipped.kind ?? "?", skipped.problem.description)
+                }
                 self.state = .loaded(snapshot)
             } catch {
+                // The menu shows the short form; the log keeps the full detail.
+                if case APIError.decoding(let problem) = error {
+                    NSLog("ClaudeLimits: usage response not understood — %@", problem.description)
+                } else {
+                    NSLog("ClaudeLimits: refresh failed — %@", self.message(for: error))
+                }
                 self.state = .failed(error, lastGood: self.lastGoodSnapshot)
             }
             self.inFlight = nil
@@ -177,6 +187,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
 
         addSpend(usage)
+
+        if let skippedNote = usage.skippedLimitsNote {
+            menu.addItem(.separator())
+            menu.addItem(caption(skippedNote, secondary: true))
+        }
 
         if let note {
             menu.addItem(.separator())

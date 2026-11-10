@@ -32,6 +32,9 @@ app: build
 ## Copy into /Applications and launch.
 install: app
 	pkill -x ClaudeLimits || true
+	@# `open` right after pkill can fail with -600 while the old instance is
+	@# still exiting, so wait for it to be gone first.
+	@while pgrep -x ClaudeLimits >/dev/null; do sleep 0.2; done
 	rm -rf /Applications/$(APP)
 	cp -R $(APP) /Applications/
 	open /Applications/$(APP)
@@ -44,6 +47,7 @@ uninstall:
 ## Launch from the build directory without installing.
 run: app
 	pkill -x ClaudeLimits || true
+	@while pgrep -x ClaudeLimits >/dev/null; do sleep 0.2; done
 	open $(APP)
 
 clean:

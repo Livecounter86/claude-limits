@@ -34,14 +34,66 @@ public struct LimitWindow: Decodable, Sendable {
     public let resetsAt: Date?
 }
 
+/// What a limit is restricted to. The API has sent this both as a bare string
+/// (`"opus"`) and as an object (`{"model": {"display_name": "Fable"}, …}`).
+public struct LimitScope: Decodable, Sendable {
+    public let modelName: String?
+
+    private struct Model: Decodable {
+        let displayName: String?
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case model
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let name = try? decoder.singleValueContainer().decode(String.self) {
+            modelName = name
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        modelName = try c.decodeIfPresent(Model.self, forKey: .model)?.displayName
+    }
+}
+
 public struct LimitEntry: Decodable, Sendable {
     public let kind: String
     public let group: String
     public let percent: Int
     public let severity: Severity
     public let resetsAt: Date?
-    public let scope: String?
+    public let scope: LimitScope?
     public let isActive: Bool
+}
+
+/// A limit entry that could not be decoded and was dropped.
+public struct SkippedLimit: Sendable {
+    /// The entry's `kind`, when even that much could be read.
+    public let kind: String?
+    public let problem: DecodingProblem
+}
+
+/// Decodes one `limits` element without letting its failure escape, so a
+/// single entry of an unknown shape cannot fail the whole payload.
+private struct LossyLimit: Decodable {
+    let entry: LimitEntry?
+    let skipped: SkippedLimit?
+
+    private struct KindOnly: Decodable {
+        let kind: String
+    }
+
+    init(from decoder: Decoder) throws {
+        do {
+            entry = try LimitEntry(from: decoder)
+            skipped = nil
+        } catch {
+            entry = nil
+            skipped = SkippedLimit(kind: try? KindOnly(from: decoder).kind,
+                                   problem: DecodingProblem(error))
+        }
+    }
 }
 
 public struct Money: Decodable, Sendable {
@@ -74,6 +126,9 @@ public struct UsageResponse: Decodable, Sendable {
     public let extraUsage: ExtraUsage?
     public let spend: Spend?
     public let limits: [LimitEntry]
+    /// Entries of `limits` that could not be decoded and were dropped, so the
+    /// menu can say the picture is incomplete instead of hiding it.
+    public let skippedLimits: [SkippedLimit]
 
     private enum CodingKeys: String, CodingKey {
         case fiveHour, sevenDay, sevenDayOpus, sevenDaySonnet
@@ -88,7 +143,9 @@ public struct UsageResponse: Decodable, Sendable {
         sevenDaySonnet = try c.decodeIfPresent(LimitWindow.self, forKey: .sevenDaySonnet)
         extraUsage     = try c.decodeIfPresent(ExtraUsage.self,  forKey: .extraUsage)
         spend          = try c.decodeIfPresent(Spend.self,       forKey: .spend)
-        limits         = try c.decodeIfPresent([LimitEntry].self, forKey: .limits) ?? []
+        let rawLimits  = try c.decodeIfPresent([LossyLimit].self, forKey: .limits) ?? []
+        limits         = rawLimits.compactMap(\.entry)
+        skippedLimits  = rawLimits.compactMap(\.skipped)
     }
 
     public static func decode(from data: Data) throws -> UsageResponse {
@@ -108,13 +165,8 @@ public extension UsageResponse {
     /// Percentage of the weekly all-models window that is used up. Per-model
     /// weekly limits (Opus, Sonnet) are deliberately not folded in here.
     var weeklyPercent: Int? {
-        if let all = limits.first(where: { $0.kind == "weekly_all" }) {
-            return all.percent
-        }
-        if let worst = limits.filter({ $0.group == "weekly" }).map(\.percent).max() {
-            return worst
-        }
-        return sevenDay.map { Int($0.utilization.rounded()) }
+        limits.first { $0.kind == "weekly_all" }?.percent
+            ?? sevenDay.map { Int($0.utilization.rounded()) }
     }
 
     var worstSeverity: Severity {
@@ -127,6 +179,17 @@ public extension UsageResponse {
 
     var weeklyResetsAt: Date? {
         limits.first { $0.kind == "weekly_all" }?.resetsAt ?? sevenDay?.resetsAt
+    }
+
+    /// One line naming the dropped entries, shared by the menu and the text
+    /// report. The full reasons go to the log, not here.
+    var skippedLimitsNote: String? {
+        guard !skippedLimits.isEmpty else { return nil }
+        var names: [String] = []
+        for name in skippedLimits.map({ $0.kind ?? "невідомий запис" }) where !names.contains(name) {
+            names.append(name)
+        }
+        return "Не вдалось прочитати: " + names.joined(separator: ", ")
     }
 }
 
@@ -149,9 +212,20 @@ public extension UsageResponse {
             ("Тиждень · Sonnet",     sevenDaySonnet.map { Int($0.utilization.rounded()) }, sevenDaySonnet?.resetsAt),
         ]
 
-        return candidates.compactMap { title, percent, resetsAt in
+        var windows = candidates.compactMap { title, percent, resetsAt in
             percent.map { UsageWindow(title: title, percent: $0, resetsAt: resetsAt) }
         }
+
+        // Newer per-model caps (e.g. Fable) appear only in `limits`. Ones that
+        // duplicate a dedicated field above (Opus, Sonnet) are skipped.
+        for entry in limits where entry.group == "weekly" && entry.kind != "weekly_all" {
+            guard let model = entry.scope?.modelName else { continue }
+            let title = "Тиждень · \(model)"
+            guard !windows.contains(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) else { continue }
+            windows.append(UsageWindow(title: title, percent: entry.percent, resetsAt: entry.resetsAt))
+        }
+
+        return windows
     }
 }
 
@@ -201,6 +275,63 @@ public extension JSONDecoder {
             return date
         }
         return decoder
+    }
+}
+
+/// A decoding failure reduced to what a person needs to find it in the raw
+/// response: where (as a JSON path, `limits[2].scope`) and what went wrong.
+public struct DecodingProblem: Sendable, CustomStringConvertible {
+    public let path: String
+    public let detail: String
+
+    public init(_ error: Error) {
+        guard let error = error as? DecodingError else {
+            path = ""
+            detail = error.localizedDescription
+            return
+        }
+        switch error {
+        case .typeMismatch(_, let context), .valueNotFound(_, let context), .dataCorrupted(let context):
+            path = Self.jsonPath(context.codingPath)
+            detail = context.debugDescription
+        case .keyNotFound(let key, let context):
+            path = Self.jsonPath(context.codingPath + [key])
+            detail = "key is missing"
+        @unknown default:
+            path = ""
+            detail = error.localizedDescription
+        }
+    }
+
+    public var description: String {
+        path.isEmpty ? detail : "\(path): \(detail)"
+    }
+
+    /// Coding keys are camelCase after `.convertFromSnakeCase`; turn them back
+    /// into the API's own spelling so the path can be searched for verbatim.
+    private static func jsonPath(_ codingPath: [CodingKey]) -> String {
+        var path = ""
+        for key in codingPath {
+            if let index = key.intValue {
+                path += "[\(index)]"
+            } else {
+                if !path.isEmpty { path += "." }
+                path += snakeCased(key.stringValue)
+            }
+        }
+        return path
+    }
+
+    private static func snakeCased(_ key: String) -> String {
+        var result = ""
+        for char in key {
+            if char.isUppercase {
+                result += "_" + char.lowercased()
+            } else {
+                result.append(char)
+            }
+        }
+        return result
     }
 }
 

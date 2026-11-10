@@ -157,6 +157,15 @@ the signed-in account is polled.
 | Token rejected (401/403) | `Токен недійсний` + the same hint |
 | No access to keychain | a hint to allow access in System Settings › Privacy |
 | No network | the last numbers, dimmed, labeled `Дані від HH:MM` |
+| API response in a shape the app doesn't understand | `Незрозуміла відповідь API: <json path>`, e.g. `five_hour.utilization` |
+| One limit entry unreadable | the other numbers as usual + `Не вдалось прочитати: <kind>` |
+
+The menu only names *where* parsing failed; the full reason goes to the
+system log (and to stderr with `--print`):
+
+```sh
+log show --last 1h --predicate 'process == "ClaudeLimits"'
+```
 
 Two principles:
 

@@ -75,6 +75,116 @@ struct ModelsTests {
         #expect(usage.limits.first?.severity == .normal)
     }
 
+    /// Per-model weekly limits (`weekly_scoped`) carry `scope` as an object,
+    /// not a string. One such entry used to fail the whole payload.
+    @Test func decodesLimitWithObjectScope() throws {
+        let usage = try UsageResponse.decode(from: Fixture.data("usage_scoped"))
+
+        #expect(usage.limits.map(\.kind) == ["session", "weekly_all", "weekly_scoped"])
+        #expect(usage.sessionPercent == 7)
+        #expect(usage.weeklyPercent == 16)
+    }
+
+    /// A limit entry of a shape we do not understand is dropped on its own,
+    /// so the rest of the payload still reaches the menu.
+    @Test func skipsUndecodableLimitEntries() throws {
+        let json = Data(#"""
+        {"limits":[
+          {"kind":"session","group":"session","percent":5,"severity":"normal",
+           "resets_at":null,"scope":null,"is_active":true},
+          {"kind":"weekly_all","group":"weekly","percent":"lots","severity":"normal",
+           "resets_at":null,"scope":null,"is_active":true}]}
+        """#.utf8)
+
+        let usage = try UsageResponse.decode(from: json)
+        #expect(usage.limits.map(\.kind) == ["session"])
+        #expect(usage.sessionPercent == 5)
+
+        let skipped = try #require(usage.skippedLimits.first)
+        #expect(usage.skippedLimits.count == 1)
+        #expect(skipped.kind == "weekly_all")
+        #expect(skipped.problem.path == "limits[1].percent")
+        #expect(usage.skippedLimitsNote == "Не вдалось прочитати: weekly_all")
+    }
+
+    /// Without a readable `kind` the entry is still reported, just unnamed,
+    /// and the path names the missing key itself.
+    @Test func reportsSkippedEntryWithoutKind() throws {
+        let json = Data(#"{"limits":[{"group":"session","percent":5}]}"#.utf8)
+
+        let usage = try UsageResponse.decode(from: json)
+        let skipped = try #require(usage.skippedLimits.first)
+        #expect(skipped.kind == nil)
+        #expect(skipped.problem.path == "limits[0].kind")
+        #expect(usage.skippedLimitsNote == "Не вдалось прочитати: невідомий запис")
+    }
+
+    @Test func countsNoSkippedLimitsForRealResponse() throws {
+        let usage = try UsageResponse.decode(from: Fixture.data("usage_scoped"))
+        #expect(usage.skippedLimits.isEmpty)
+        #expect(usage.skippedLimitsNote == nil)
+    }
+
+    /// When the payload as a whole cannot be read, the error names the field
+    /// as it appears in the API's JSON, not the generic Foundation message.
+    @Test func describesWholePayloadFailureByJSONPath() throws {
+        let json = Data(#"{"five_hour":{"utilization":"high","resets_at":null}}"#.utf8)
+
+        let error = try #require(throws: DecodingError.self) {
+            try UsageResponse.decode(from: json)
+        }
+        let problem = DecodingProblem(error)
+
+        #expect(problem.path == "five_hour.utilization")
+        #expect(problem.description.hasPrefix("five_hour.utilization: "))
+        #expect(APIError.decoding(problem).errorDescription
+                == "Незрозуміла відповідь API: five_hour.utilization")
+    }
+
+    /// Without `weekly_all`, the all-models figure comes from `seven_day` —
+    /// never from a per-model cap, which is a different, smaller number.
+    @Test func weeklyPercentFallsBackToSevenDayNotPerModel() throws {
+        let json = Data(#"""
+        {"seven_day":{"utilization":16.0,"resets_at":null},
+         "limits":[{"kind":"weekly_scoped","group":"weekly","percent":4,"severity":"normal",
+           "resets_at":null,"scope":{"model":{"display_name":"Fable"}},"is_active":false}]}
+        """#.utf8)
+
+        let usage = try UsageResponse.decode(from: json)
+        #expect(usage.weeklyPercent == 16)
+    }
+
+    @Test func weeklyPercentIsAbsentWhenOnlyPerModelCapsExist() throws {
+        let json = Data(#"""
+        {"limits":[{"kind":"weekly_scoped","group":"weekly","percent":4,"severity":"normal",
+           "resets_at":null,"scope":{"model":{"display_name":"Fable"}},"is_active":false}]}
+        """#.utf8)
+
+        let usage = try UsageResponse.decode(from: json)
+        #expect(usage.weeklyPercent == nil)
+        #expect(usage.windows.map(\.title) == ["Тиждень · Fable"])
+    }
+
+    @Test func readsModelNameFromBothScopeShapes() throws {
+        let scoped = try UsageResponse.decode(from: Fixture.data("usage_scoped"))
+        #expect(scoped.limits.last?.scope?.modelName == "Fable")
+
+        let heavy = try UsageResponse.decode(from: Fixture.data("usage_heavy"))
+        #expect(heavy.limits.last?.scope?.modelName == "opus")
+    }
+
+    /// Per-model weekly caps that exist only in `limits` get their own window.
+    @Test func windowListIncludesScopedWeeklyLimits() throws {
+        let usage = try UsageResponse.decode(from: Fixture.data("usage_scoped"))
+
+        #expect(usage.windows.map(\.title) == [
+            "5-годинна сесія",
+            "Тиждень · усі моделі",
+            "Тиждень · Fable",
+        ])
+        #expect(usage.windows.map(\.percent) == [7, 16, 4])
+    }
+
     @Test func decodesSpend() throws {
         let usage = try UsageResponse.decode(from: Fixture.data("usage_heavy"))
         let spend = try #require(usage.spend)

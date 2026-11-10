@@ -4,12 +4,17 @@ public enum APIError: Error, LocalizedError {
     case unauthorized
     case http(Int)
     case transport(String)
+    /// The response arrived but its shape is not what the models expect.
+    case decoding(DecodingProblem)
 
     public var errorDescription: String? {
         switch self {
         case .unauthorized:      return "Токен недійсний"
         case .http(let code):    return "Сервер відповів \(code)"
         case .transport(let m):  return "Немає зв'язку: \(m)"
+        case .decoding(let p):   return p.path.isEmpty
+                                     ? "Незрозуміла відповідь API"
+                                     : "Незрозуміла відповідь API: \(p.path)"
         }
     }
 }
@@ -89,7 +94,11 @@ public struct UsageAPI: Sendable {
             throw APIError.http(http.statusCode)
         }
 
-        return try JSONDecoder.claude.decode(T.self, from: data)
+        do {
+            return try JSONDecoder.claude.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(DecodingProblem(error))
+        }
     }
 }
 
