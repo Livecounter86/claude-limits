@@ -64,6 +64,24 @@ struct TextReportTests {
         #expect(report.contains("5-годинна сесія — 2%"))
     }
 
+    /// Dropped limit entries are flagged at the end, as in the menu.
+    @Test func endsWithNoteAboutSkippedLimits() throws {
+        let json = Data(#"""
+        {"limits":[
+          {"kind":"session","group":"session","percent":5,"severity":"normal",
+           "resets_at":null,"scope":null,"is_active":true},
+          {"kind":"weekly_all","group":"weekly","percent":"lots","severity":"normal",
+           "resets_at":null,"scope":null,"is_active":true}]}
+        """#.utf8)
+        let usage = try UsageResponse.decode(from: json)
+        let snapshot = UsageSnapshot(usage: usage, profile: nil)
+        let now = try date("2026-09-04T12:24:00Z")
+
+        let report = TextReport.render(snapshot, now: now, calendar: kyiv)
+
+        #expect(report.hasSuffix("\n\nНе вдалось прочитати: weekly_all"))
+    }
+
     /// An empty payload should say so, not render a blank block.
     @Test func reportsWhenThereIsNothingToShow() throws {
         let usage = try UsageResponse.decode(from: Data("{}".utf8))

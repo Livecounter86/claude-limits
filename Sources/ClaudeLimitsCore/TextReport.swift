@@ -42,6 +42,10 @@ public enum TextReport {
             blocks.append("Extra credits — \(used) / \(limit)")
         }
 
+        if let note = usage.skippedLimitsNote {
+            blocks.append(note)
+        }
+
         return blocks.joined(separator: "\n\n")
     }
 

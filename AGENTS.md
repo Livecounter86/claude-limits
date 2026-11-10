@@ -45,6 +45,17 @@ don't duplicate README.
   (`refreshInterval` / `minimumRefreshInterval`) for the real numbers before
   trusting README's wording on timing, and fix README when you touch this
   area again.
+- **API shape drift (2026-11):** `limits[].scope` changed from a string
+  (`"opus"`) to an object (`{"model": {"display_name": "Fable"}, …}`) when
+  `weekly_scoped` entries appeared, and one such entry failed the whole
+  payload. Now `LimitScope` accepts both shapes, `limits` is decoded
+  per-entry (a bad entry is dropped, named in the menu, and logged with its
+  JSON path), and a whole-payload failure surfaces as `APIError.decoding`
+  with the path. When something breaks again, read the reason with
+  `log show --last 1h --predicate 'process == "ClaudeLimits"'` or `--print`
+  before guessing. Also: `weeklyPercent` falls back to `seven_day`, never to
+  a per-model cap — a dropped `weekly_all` must not show Fable's 4% as the
+  weekly figure.
 - The API has no RPM/request-count endpoint — only percentages for the
   5-hour and weekly windows, per `UsageResponse`. Don't build a feature that
   assumes raw request counts are available.

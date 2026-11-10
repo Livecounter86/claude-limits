@@ -20,9 +20,16 @@ if CommandLine.arguments.contains("--print") {
         do {
             let snapshot = try await UsageAPI().fetchSnapshot()
             print(TextReport.render(snapshot))
+            for skipped in snapshot.usage.skippedLimits {
+                let line = "skipped \(skipped.kind ?? "?") — \(skipped.problem)\n"
+                FileHandle.standardError.write(Data(line.utf8))
+            }
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription
+            var message = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
+            if case APIError.decoding(let problem) = error {
+                message += "\n\(problem)"
+            }
             FileHandle.standardError.write(Data("\(message)\n".utf8))
             exitCode = 1
         }
